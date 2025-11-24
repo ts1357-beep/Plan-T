@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plan-T (Local v5)</title>
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 html2canvas 用於導出圖片 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        /* 設定字體為 Inter，增加中文可讀性 */
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background-color: #f7f9fb;
+        }
+        /* 自定義樣式：使表格單元格可編輯時有更明顯的焦點 */
+        .editable-cell:focus {
+            outline: 2px solid theme('colors.blue.400');
+            border-color: transparent; /* 聚焦時隱藏原本的邊框 */
+            box-shadow: 0 0 0 2px theme('colors.blue.200');
+        }
+        
+        /* 固定第一欄日期寬度: 縮小為 w-28 */
+        .date-cell {
+            min-width: 112px; /* w-28 in Tailwind */
+            vertical-align: middle; /* 垂直置中 */
+        }
+        
+        /* 區分每一天的框線樣式為黑色 (Black) */
+        .new-day-border-top {
+            border-top: 4px solid #000 !important; /* 更粗、更明顯的黑色頂部邊框 */
+        }
+
+        /* 明顯的垂直分隔線 */
+        .thick-border-left {
+            border-left: 2px solid #cbd5e1 !important; /* Gray-300 range */
+        }
+        
+        /* 控制項樣式：預設隱藏，父層 focus-within 或 hover 時顯示 */
+        .row-controls {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+        
+        /* 當 Location 儲存格被聚焦時顯示控制項 */
+        td.location-cell-wrapper:focus-within .row-controls,
+        td.location-cell-wrapper:hover .row-controls {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* 類別選單基礎樣式 */
+        .category-popover-menu, .confirmation-popover-menu {
+            position: absolute;
+            z-index: 50;
+        }
+
+        /* 覆蓋 bg-white，確保顏色填滿 */
+        .location-cell-content.bg-white {
+            background-color: white !important;
+        }
+
+        /* 確保 editable-cell 內容可以填色 */
+        .location-cell-content {
+            transition: background-color 0.3s;
+        }
+
+        /* 表頭 Cost 子標題的樣式 */
+        .cost-subheader-cell {
+            background-color: theme('colors.blue.100');
+            padding: 8px;
+            font-size: 0.75rem; /* text-xs */
+            font-weight: 500; /* font-medium */
+            text-align: left;
+            border-left: 1px solid theme('colors.gray.200'); /* 子欄位之間的區隔線 */
+        }
+        .cost-subheader-cell:focus {
+            background-color: white; /* 聚焦時背景變白 */
+        }
+
+        /* 隱藏列印或截圖時的按鈕 */
+        @media print {
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <!-- 主容器 -->
+    <div class="max-w-6xl mx-auto p-4 md:p-6">
+        
+        <!-- 應用程式標題 -->
+        <header class="text-center mb-8 bg-white p-4 rounded-xl shadow-lg flex justify-between items-center relative">
+            <div class="w-12"></div> <!-- Spacer for centering -->
+            <h1 class="text-4xl font-extrabold text-blue-700 tracking-tight flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3 text-blue-500">
+                    <rect x="6" y="2" width="16" height="18" rx="2" ry="2"></rect>
+                    <path d="M10 2v4a2 0 0 0 2 2h4a2 0 0 0 2-2V2"></path>
+                    <line x1="2" y1="13" x2="6" y2="13"></line>
+                    <line x1="2" y1="9" x2="6" y2="9"></line>
+                    <path d="M2 5v14a2 0 0 0 2 2h14"></path>
+                </svg>
+                Plan-T (Local v5)
+            </h1>
+            <div class="w-12"></div> <!-- Spacer for centering -->
+        </header>
+
+        <!-- 訊息/加載指示器 -->
+        <div id="message-area" class="text-center mb-4 hidden"></div>
+
+        <!-- 輸入表單區塊 -->
+        <section id="input-form-section" class="bg-white p-6 rounded-xl shadow-lg mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">建立/編輯 行程計畫</h2>
+            <form id="plan-form" class="space-y-4">
+                <div>
+                    <label for="tripName" class="block text-sm font-medium text-gray-700">計畫名稱</label>
+                    <input type="text" id="tripName" required class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" placeholder="輸入行程標題，例如：日本關西五日遊">
+                </div>
+                
+                <!-- 日期選擇區域 -->
+                <div class="grid grid-cols-2 gap-4 relative">
+                    <!-- 起始日期 -->
+                    <div>
+                        <label for="startDateDisplay" class="block text-sm font-medium text-gray-700">起始日期 (YYYY/MM/DD)</label>
+                        <div class="relative mt-1">
+                            <input type="text" id="startDateDisplay" required class="block w-full rounded-l-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border bg-white" placeholder="YYYY/MM/DD" onchange="handleManualDateInput(this.value, 'startDate')">
+                            <input type="hidden" id="startDate" name="startDate">
+                            <button type="button" data-input="startDate" class="absolute inset-y-0 right-0 flex items-center px-3 bg-blue-100 rounded-r-lg border border-l-0 border-gray-300 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 z-10" onclick="showCalendar('startDate')">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 結束日期 -->
+                    <div>
+                        <label for="endDateDisplay" class="block text-sm font-medium text-gray-700">結束日期 (YYYY/MM/DD)</label>
+                        <div class="relative mt-1">
+                            <input type="text" id="endDateDisplay" required class="block w-full rounded-l-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border bg-white" placeholder="YYYY/MM/DD" onchange="handleManualDateInput(this.value, 'endDate')">
+                            <input type="hidden" id="endDate" name="endDate">
+                            <button type="button" data-input="endDate" class="absolute inset-y-0 right-0 flex items-center px-3 bg-blue-100 rounded-r-lg border border-l-0 border-gray-300 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 z-10" onclick="showCalendar('endDate')">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 自定義日曆組件 -->
+                    <div id="calendar-popover" class="absolute top-full left-0 mt-2 w-full z-20 bg-white border border-gray-200 rounded-xl shadow-2xl p-4 hidden md:w-80 md:left-1/2 md:-translate-x-1/2">
+                        <div id="calendar-header" class="flex justify-between items-center mb-4">
+                            <button id="prev-month" type="button" class="p-2 rounded-full hover:bg-gray-100 transition duration-150" onclick="changeMonth(-1)">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            </button>
+                            <span id="current-month-year" class="font-semibold text-lg text-gray-800"></span>
+                            <button id="next-month" type="button" class="p-2 rounded-full hover:bg-gray-100 transition duration-150" onclick="changeMonth(1)">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </button>
+                        </div>
+                        <div id="calendar-weekdays" class="grid grid-cols-7 text-center text-xs font-medium text-gray-500 mb-2">
+                            <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+                        </div>
+                        <div id="calendar-days" class="grid grid-cols-7 gap-1"></div>
+                    </div>
+                </div>
+                
+                <!-- 導入檔案 -->
+                 <div class="mt-4 pt-4 border-t border-gray-100">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">或導入現有計畫 (JSON)</label>
+                    <input type="file" id="import-file-input" accept=".json" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                </div>
+
+                <div class="flex gap-4 pt-2">
+                    <button type="button" id="full-reset-button" class="w-1/3 py-2 px-4 border border-red-300 rounded-lg shadow-sm text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition duration-150">
+                        清除所有資料
+                    </button>
+                    <button type="submit" id="generate-button" class="w-2/3 py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150">
+                        更新 / 生成行程表
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- 行程表顯示區塊 -->
+        <section id="itinerary-table-section" class="hidden">
+            
+            <!-- 工具列 (復原/重做/導出) -->
+            <div class="mb-4 flex flex-wrap justify-between items-center gap-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100 no-print">
+                <div class="flex gap-2">
+                     <button id="btn-undo" onclick="undo()" class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>
+                        上一步
+                    </button>
+                    <button id="btn-redo" onclick="redo()" class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"></path><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"></path></svg>
+                        下一步
+                    </button>
+                </div>
+
+                <div class="flex gap-2">
+                    <button onclick="exportToJPG()" class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-indigo-500 rounded hover:bg-indigo-600">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                        導出 JPG
+                    </button>
+                    <button onclick="exportToCSV()" class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded hover:bg-green-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                        導出 CSV
+                    </button>
+                    <button onclick="exportToJSON()" class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-200 rounded hover:bg-gray-300">
+                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        備份 JSON
+                    </button>
+                </div>
+            </div>
+
+            <div id="capture-area" class="bg-white rounded-xl shadow-lg p-1">
+                <h2 id="current-trip-name" class="text-2xl font-bold my-4 text-gray-800 text-center"></h2>
+                <!-- 表格容器 -->
+                <div class="overflow-x-auto pb-4">
+                    <table class="min-w-full divide-y divide-gray-200 table-fixed border-b border-gray-200">
+                        <thead class="bg-blue-50">
+                            <tr>
+                                <!-- Date -->
+                                <th scope="col" rowspan="2" class="w-28 px-2 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider border-r border-gray-200 align-bottom">
+                                    Date
+                                </th>
+                                <!-- Location -->
+                                <th scope="col" rowspan="2" class="w-1/4 px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider align-bottom">
+                                    Location
+                                </th>
+                                <!-- 出發時間 -->
+                                <th scope="col" rowspan="2" class="w-24 px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider align-bottom thick-border-left">
+                                    出發時間
+                                </th>
+                                <!-- Cost (合併儲存格) -->
+                                <th scope="col" colspan="2" class="w-48 px-3 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 thick-border-left">
+                                    Cost
+                                </th>
+                                <!-- 確 -->
+                                <th scope="col" rowspan="2" class="w-16 px-3 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider align-bottom thick-border-left">
+                                    確
+                                </th>
+                                <!-- Remark -->
+                                <th scope="col" rowspan="2" class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider align-bottom thick-border-left">
+                                    Remark
+                                </th>
+                            </tr>
+                            <tr>
+                                <!-- Cost Subheaders (可編輯) -->
+                                <th scope="col" class="w-24 cost-subheader-cell editable-cell thick-border-left" contenteditable="true" data-field="costHeader1" data-header="true">
+                                    (NTD)
+                                </th>
+                                <th scope="col" class="w-24 cost-subheader-cell editable-cell" contenteditable="true" data-field="costHeader2" data-header="true">
+                                    (円)
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="itinerary-body" class="bg-white divide-y divide-gray-200">
+                            <!-- 行程資料將透過 JavaScript 插入這裡 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="mt-6 text-center no-print">
+                <button id="edit-plan-button" class="py-2 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition duration-150">
+                    回到上一頁 (編輯名稱/日期)
+                </button>
+            </div>
+        </section>
+
+        <!-- 加載動畫 -->
+        <div id="loading-spinner" class="hidden text-center p-8 fixed inset-0 bg-white/80 z-[60] flex flex-col justify-center items-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+            <p id="loading-text" class="mt-3 text-blue-600 font-medium">載入中...</p>
+        </div>
+
+    </div>
+
+    <!-- 類別選單容器 -->
+    <div id="global-category-popover" class="hidden category-popover-menu w-40 bg-white border border-gray-200 rounded-lg shadow-xl p-1 z-50"></div>
+
+    <!-- 確認狀態選單容器 -->
+    <div id="global-confirmation-popover" class="hidden confirmation-popover-menu w-32 bg-white border border-gray-200 rounded-lg shadow-xl p-1 z-50"></div>
+
+    <script>
+        // --- 全域變數與配置 (Local Storage Version) ---
+        const STORAGE_KEY_PLAN = 'plant_t_local_plan';
+        const STORAGE_KEY_HEADER = 'plant_t_local_header';
+        
+        // 類別與顏色映射表
+        const CATEGORY_MAP = {
+            "重點": { class: "bg-lime-200" }, 
+            "交通": { class: "bg-yellow-100" },  
+            "活動區": { class: "bg-green-100" }, 
+            "事件": { class: "bg-blue-100" },  
+        };
+
+        const CONFIRMATION_MAP = {
+            "O": { symbol: "✔", class: "bg-green-500 text-white hover:bg-green-600", text: "已確認" },
+            "X": { symbol: "✘", class: "bg-red-500 text-white hover:bg-red-600", text: "未確認" },
+            "TBD": { symbol: "△", class: "bg-yellow-400 text-gray-800 hover:bg-yellow-500", text: "待定 (TBD)" },
+        };
+
+        // DOM Elements
+        const planForm = document.getElementById('plan-form');
+        const inputFormSection = document.getElementById('input-form-section');
+        const itineraryTableSection = document.getElementById('itinerary-table-section');
+        const itineraryBody = document.getElementById('itinerary-body');
+        const currentTripName = document.getElementById('current-trip-name');
+        const messageArea = document.getElementById('message-area');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const loadingText = document.getElementById('loading-text');
+        const editPlanButton = document.getElementById('edit-plan-button');
+        const fullResetButton = document.getElementById('full-reset-button');
+        const globalCategoryPopover = document.getElementById('global-category-popover');
+        const globalConfirmationPopover = document.getElementById('global-confirmation-popover');
+        const importFileInput = document.getElementById('import-file-input');
+
+        // Undo/Redo Elements
+        const btnUndo = document.getElementById('btn-undo');
+        const btnRedo = document.getElementById('btn-redo');
+        
+        // --- History State Management (Undo/Redo) ---
+        let historyStack = [];
+        let historyIndex = -1;
+        const MAX_HISTORY = 50;
+        let isInternalUpdate = false; // 防止 Undo/Redo 時重複觸發 pushState
+
+        const pushState = () => {
+            if (isInternalUpdate) return;
+
+            const currentData = getStoredPlan();
+            // 如果當前狀態跟歷史最新的狀態一樣，就不推入（避免重複）
+            if (historyIndex >= 0 && JSON.stringify(historyStack[historyIndex]) === JSON.stringify(currentData)) {
+                return;
+            }
+
+            // 清除 index 之後的歷史（分歧點）
+            historyStack = historyStack.slice(0, historyIndex + 1);
+            historyStack.push(JSON.parse(JSON.stringify(currentData))); // Deep copy
+            if (historyStack.length > MAX_HISTORY) historyStack.shift();
+            historyIndex = historyStack.length - 1;
+            updateUndoRedoUI();
+        };
+
+        const undo = () => {
+            if (historyIndex > 0) {
+                historyIndex--;
+                const state = historyStack[historyIndex];
+                isInternalUpdate = true;
+                savePlanToStorage(state, false); // false = 不要再次 pushState
+                renderFromState(state);
+                isInternalUpdate = false;
+                updateUndoRedoUI();
+            }
+        };
+
+        const redo = () => {
+            if (historyIndex < historyStack.length - 1) {
+                historyIndex++;
+                const state = historyStack[historyIndex];
+                isInternalUpdate = true;
+                savePlanToStorage(state, false);
+                renderFromState(state);
+                isInternalUpdate = false;
+                updateUndoRedoUI();
+            }
+        };
+
+        const updateUndoRedoUI = () => {
+            btnUndo.disabled = historyIndex <= 0;
+            btnRedo.disabled = historyIndex >= historyStack.length - 1;
+        };
+
+        const renderFromState = (data) => {
+            if (data && data.itinerary) {
+                renderItineraryTable(data.itinerary, data.tripName);
+                // 同步表單（雖然此時表單隱藏）
+                document.getElementById('tripName').value = data.tripName || '';
+                if(data.startDate) {
+                     dateInputHidden('startDate').value = data.startDate;
+                     dateInputDisplay('startDate').value = dateToDisplayString(isoStringToDate(data.startDate));
+                }
+                if(data.endDate) {
+                     dateInputHidden('endDate').value = data.endDate;
+                     dateInputDisplay('endDate').value = dateToDisplayString(isoStringToDate(data.endDate));
+                }
+            }
+        };
+
+
+        // --- Calendar & Date Logic ---
+        const dateInputDisplay = (id) => document.getElementById(id + 'Display');
+        const dateInputHidden = (id) => document.getElementById(id);
+        const calendarPopover = document.getElementById('calendar-popover');
+        const currentMonthYear = document.getElementById('current-month-year');
+        const calendarDaysContainer = document.getElementById('calendar-days');
+
+        let calendarState = {
+            activeInputId: null,
+            currentDisplayDate: new Date(),
+            selectedStartDate: null,
+            selectedEndDate: null,
+        };
+
+        const dateToIsoString = (date) => {
+            if (!date) return '';
+            return date.getFullYear() + '-' + 
+                   String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+                   String(date.getDate()).padStart(2, '0');
+        };
+
+        const dateToDisplayString = (date) => {
+            if (!date) return '';
+            return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+        };
+
+        const isoStringToDate = (isoString) => {
+            if (!isoString) return null;
+            const parts = isoString.split(/[-/]/).map(Number); // Support both - and /
+            return new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0);
+        };
+        
+        window.showCalendar = (inputId) => {
+            if (calendarState.activeInputId === inputId && !calendarPopover.classList.contains('hidden')) {
+                calendarPopover.classList.add('hidden');
+                calendarState.activeInputId = null;
+                return;
+            }
+            calendarState.activeInputId = inputId;
+            
+            const startIso = dateInputHidden('startDate').value;
+            const endIso = dateInputHidden('endDate').value;
+            calendarState.selectedStartDate = isoStringToDate(startIso);
+            calendarState.selectedEndDate = isoStringToDate(endIso);
+            
+            let initialDate = calendarState.activeInputId === 'startDate' ? calendarState.selectedStartDate : calendarState.selectedEndDate;
+            if (!initialDate) {
+                if (calendarState.activeInputId === 'endDate' && calendarState.selectedStartDate) {
+                    initialDate = calendarState.selectedStartDate;
+                } else {
+                    initialDate = new Date();
+                }
+            }
+            calendarState.currentDisplayDate = new Date(initialDate.getFullYear(), initialDate.getMonth(), 1);
+            renderCalendar();
+            calendarPopover.classList.remove('hidden');
+        };
+
+        const renderCalendar = () => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            const displayDate = calendarState.currentDisplayDate;
+            const year = displayDate.getFullYear();
+            const month = displayDate.getMonth();
+            
+            currentMonthYear.textContent = `${year} 年 ${month + 1} 月`;
+            
+            const firstDayOfMonth = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            
+            calendarDaysContainer.innerHTML = '';
+            
+            for (let i = 0; i < firstDayOfMonth; i++) {
+                calendarDaysContainer.appendChild(document.createElement('div'));
+            }
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(year, month, day);
+                date.setHours(0, 0, 0, 0);
+                
+                const cell = document.createElement('button');
+                cell.textContent = day;
+                cell.type = 'button';
+                cell.className = 'p-1.5 rounded-full text-sm font-medium transition duration-100 w-full aspect-square flex items-center justify-center';
+                
+                const startDate = calendarState.selectedStartDate;
+                const endDate = calendarState.selectedEndDate;
+
+                let isSelectedStart = startDate && date.getTime() === startDate.getTime();
+                let isSelectedEnd = endDate && date.getTime() === endDate.getTime();
+                let isToday = date.getTime() === today.getTime();
+                let isInRange = false;
+                
+                if (startDate && endDate) {
+                    isInRange = date > startDate && date < endDate;
+                } else if (calendarState.activeInputId === 'endDate' && startDate && date > startDate) {
+                     isInRange = date > startDate;
+                }
+
+                cell.classList.add('text-gray-700', 'hover:bg-gray-200');
+
+                if (isSelectedStart || isSelectedEnd) {
+                    cell.classList.remove('text-gray-700', 'hover:bg-gray-200', 'bg-blue-200', 'text-blue-800', 'rounded-none');
+                    cell.classList.add('bg-blue-600', 'text-white', 'hover:bg-blue-700', 'font-bold', 'rounded-full');
+                } else if (isInRange) {
+                    cell.classList.remove('text-gray-700', 'hover:bg-gray-200');
+                    cell.classList.add('bg-blue-200', 'text-blue-800', 'rounded-none');
+                } else if (isToday) {
+                    cell.classList.add('border-2', 'border-blue-400', 'bg-blue-50');
+                }
+
+                cell.onclick = (e) => { e.preventDefault(); selectDate(date); };
+                calendarDaysContainer.appendChild(cell);
+            }
+        };
+
+        window.changeMonth = (offset) => {
+            calendarState.currentDisplayDate.setMonth(calendarState.currentDisplayDate.getMonth() + offset);
+            renderCalendar();
+        };
+
+        const selectDate = (date) => {
+            const isoDate = dateToIsoString(date);
+            
+            if (calendarState.activeInputId === 'startDate') {
+                calendarState.selectedStartDate = date;
+                dateInputDisplay('startDate').value = dateToDisplayString(date);
+                dateInputHidden('startDate').value = isoDate;
+                
+                if (calendarState.selectedEndDate && date > calendarState.selectedEndDate) {
+                    calendarState.selectedEndDate = null;
+                    document.getElementById('endDate').value = '';
+                    document.getElementById('endDateDisplay').value = '';
+                }
+                
+                calendarState.activeInputId = 'endDate';
+                calendarState.currentDisplayDate = new Date(date.getFullYear(), date.getMonth(), 1);
+                renderCalendar();
+                
+            } else { 
+                if (calendarState.selectedStartDate && date < calendarState.selectedStartDate) {
+                    calendarState.selectedEndDate = calendarState.selectedStartDate;
+                    calendarState.selectedStartDate = date;
+                    
+                    dateInputDisplay('startDate').value = dateToDisplayString(calendarState.selectedStartDate);
+                    dateInputHidden('startDate').value = dateToIsoString(calendarState.selectedStartDate);
+                    dateInputDisplay('endDate').value = dateToDisplayString(calendarState.selectedEndDate);
+                    dateInputHidden('endDate').value = dateToIsoString(calendarState.selectedEndDate);
+                } else {
+                    calendarState.selectedEndDate = date;
+                    dateInputDisplay('endDate').value = dateToDisplayString(date);
+                    dateInputHidden('endDate').value = isoDate;
+                }
+                calendarPopover.classList.add('hidden');
+                calendarState.activeInputId = null;
+            }
+        };
+
+        // 點擊外部關閉彈出視窗
+        document.addEventListener('click', (event) => {
+            const isInsideForm = inputFormSection.contains(event.target);
+            const isInsideCalendar = calendarPopover.contains(event.target);
+            const isInsideCategoryPopover = globalCategoryPopover.contains(event.target);
+            const isCategoryButton = event.target.closest('.category-toggle-btn');
+            const isInsideConfirmationPopover = globalConfirmationPopover.contains(event.target);
+            const isConfirmationButton = event.target.closest('.confirmation-toggle-btn');
+            
+            if (!calendarPopover.classList.contains('hidden') && !isInsideForm && !isInsideCalendar) {
+                calendarPopover.classList.add('hidden');
+                calendarState.activeInputId = null;
+            }
+
+            if (!globalCategoryPopover.classList.contains('hidden') && !isInsideCategoryPopover && !isCategoryButton) {
+                globalCategoryPopover.classList.add('hidden');
+            }
+
+            if (!globalConfirmationPopover.classList.contains('hidden') && !isInsideConfirmationPopover && !isConfirmationButton) {
+                globalConfirmationPopover.classList.add('hidden');
+            }
+        });
+
+        // 嚴格的日期輸入格式檢查
+        window.handleManualDateInput = (value, inputId) => {
+            // Regex: YYYY/MM/DD or YYYY-MM-DD
+            const dateRegex = /^\d{4}[\/\-](0[1-9]|1[0-2])[\/\-](0[1-9]|[12]\d|3[01])$/;
+            
+            const hiddenInput = document.getElementById(inputId);
+            const displayInput = document.getElementById(inputId + 'Display');
+
+            if (!value) {
+                hiddenInput.value = '';
+                return;
+            }
+
+            if (!dateRegex.test(value)) {
+                showMessage("日期格式錯誤，請使用 YYYY/MM/DD 或 YYYY-MM-DD", 'error');
+                // 還原為舊值或清空
+                displayInput.value = hiddenInput.value ? dateToDisplayString(isoStringToDate(hiddenInput.value)) : '';
+                return;
+            }
+
+            let date = new Date(value);
+            if (isNaN(date.getTime())) {
+                 showMessage("無效的日期", 'error');
+                 displayInput.value = hiddenInput.value ? dateToDisplayString(isoStringToDate(hiddenInput.value)) : '';
+                 return;
+            }
+
+            hiddenInput.value = dateToIsoString(date);
+
+            if (inputId === 'startDate') {
+                calendarState.selectedStartDate = date;
+                if (calendarState.selectedEndDate && date > calendarState.selectedEndDate) {
+                    calendarState.selectedEndDate = null;
+                    document.getElementById('endDate').value = '';
+                    document.getElementById('endDateDisplay').value = '';
+                }
+            } else {
+                calendarState.selectedEndDate = date;
+            }
+        };
+
+        const formatDay = (date, dayNum, dayOfWeek) => {
+            const dateObj = new Date(date);
+            const month = dateObj.getMonth() + 1;
+            const day = dateObj.getDate();
+            const weekDay = dayOfWeek || ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][dateObj.getDay()];
+            return `${month}/${day}<br>${weekDay}<br>( Day ${dayNum} )`;
+        };
+
+        const showMessage = (text, type = 'info') => {
+            messageArea.textContent = text;
+            messageArea.className = `text-center mb-4 p-3 rounded-lg ${type === 'error' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`;
+            messageArea.classList.remove('hidden');
+            setTimeout(() => messageArea.classList.add('hidden'), 3000);
+        };
+
+        // --- Local Storage Data Handling ---
+
+        let headerData = {
+            costHeader1: '(NTD)',
+            costHeader2: '(円)',
+        };
+
+        const loadHeaderData = () => {
+            const stored = localStorage.getItem(STORAGE_KEY_HEADER);
+            if (stored) {
+                try {
+                    headerData = { ...headerData, ...JSON.parse(stored) };
+                } catch (e) {
+                    console.error("Header parse error", e);
+                }
+            }
+            updateHeaderDOM();
+        };
+
+        const saveHeaderData = (data) => {
+            headerData = data;
+            localStorage.setItem(STORAGE_KEY_HEADER, JSON.stringify(data));
+        };
+
+        const updateHeaderDOM = () => {
+            const header1 = document.querySelector('[data-field="costHeader1"]');
+            const header2 = document.querySelector('[data-field="costHeader2"]');
+            if (header1) header1.textContent = headerData.costHeader1;
+            if (header2) header2.textContent = headerData.costHeader2;
+        };
+
+        const getStoredPlan = () => {
+            const stored = localStorage.getItem(STORAGE_KEY_PLAN);
+            return stored ? JSON.parse(stored) : null;
+        };
+
+        const savePlanToStorage = (data, recordHistory = true) => {
+            localStorage.setItem(STORAGE_KEY_PLAN, JSON.stringify(data));
+            if (recordHistory) {
+                pushState();
+            }
+        };
+
+        const loadExistingPlan = () => {
+            const data = getStoredPlan();
+            
+            if (data) {
+                // Initialize History with current loaded state
+                if (historyIndex === -1) {
+                    historyStack.push(JSON.parse(JSON.stringify(data)));
+                    historyIndex = 0;
+                    updateUndoRedoUI();
+                }
+
+                document.getElementById('tripName').value = data.tripName || '';
+                if (data.startDate) {
+                    const start = isoStringToDate(data.startDate);
+                    calendarState.selectedStartDate = start;
+                    dateInputDisplay('startDate').value = dateToDisplayString(start);
+                    dateInputHidden('startDate').value = data.startDate;
+                }
+                if (data.endDate) {
+                    const end = isoStringToDate(data.endDate);
+                    calendarState.selectedEndDate = end;
+                    dateInputDisplay('endDate').value = dateToDisplayString(end);
+                    dateInputHidden('endDate').value = data.endDate;
+                }
+
+                if (data.itinerary && data.itinerary.length > 0) {
+                    renderItineraryTable(data.itinerary, data.tripName);
+                } else {
+                    inputFormSection.classList.remove('hidden');
+                    itineraryTableSection.classList.add('hidden');
+                }
+            } else {
+                inputFormSection.classList.remove('hidden');
+                itineraryTableSection.classList.add('hidden');
+            }
+        };
+
+        const handlePlanFormSubmit = (event) => {
+            event.preventDefault();
+            
+            // Check if plan exists (Logic Updated: Smart Update - Fix for v5)
+            const existingPlan = getStoredPlan();
+            
+            const tripName = document.getElementById('tripName').value.trim();
+            const startDateStr = dateInputHidden('startDate').value;
+            const endDateStr = dateInputHidden('endDate').value;
+            
+            if (!tripName || !startDateStr || !endDateStr) {
+                showMessage("請填寫完整資訊。", 'error');
+                return;
+            }
+
+            const startDate = isoStringToDate(startDateStr);
+            const endDate = isoStringToDate(endDateStr);
+
+            if (startDate > endDate) {
+                showMessage("日期範圍無效。", 'error');
+                return;
+            }
+            
+            loadingText.textContent = '智慧更新行程...';
+            loadingSpinner.classList.remove('hidden');
+
+            // --- Smart Sync Logic (Fix for data shifting) ---
+            // 1. Group existing items by Day Number (relative to start)
+            // This ensures that if you have 3 items on Day 1, they stay on Day 1.
+            const existingItemsByDay = {};
+            if (existingPlan && existingPlan.itinerary) {
+                existingPlan.itinerary.forEach(item => {
+                    const dNum = item.dayNum || 1; // Default to 1 if undefined
+                    if (!existingItemsByDay[dNum]) {
+                        existingItemsByDay[dNum] = [];
+                    }
+                    existingItemsByDay[dNum].push(item);
+                });
+            }
+
+            const newItinerary = [];
+            let currentDate = new Date(startDate);
+            let dayIndex = 0; // 0-based index
+
+            // 2. Generate new timeline
+            while (currentDate <= endDate) {
+                const currentDayNum = dayIndex + 1; // 1-based day number
+                const dateStr = dateToIsoString(currentDate);
+                const dayOfWeekStr = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][currentDate.getDay()];
+
+                // Check if we have items for this relative day
+                if (existingItemsByDay[currentDayNum]) {
+                    // Carry over ALL items for this day, updating date info
+                    existingItemsByDay[currentDayNum].forEach(item => {
+                        newItinerary.push({
+                            ...item,
+                            date: dateStr,
+                            dayNum: currentDayNum,
+                            dayOfWeek: dayOfWeekStr
+                        });
+                    });
+                } else {
+                    // New day or no items: Add ONE empty row to ensure structure
+                    newItinerary.push({
+                        date: dateStr,
+                        dayNum: currentDayNum,
+                        dayOfWeek: dayOfWeekStr,
+                        location: "",
+                        departureTime: "",
+                        cost1: "",
+                        cost2: "",
+                        confirmation: "TBD",
+                        remark: "",
+                        category: ""
+                    });
+                }
+
+                currentDate.setDate(currentDate.getDate() + 1);
+                dayIndex++;
+            }
+
+            const newData = {
+                tripName: tripName,
+                startDate: startDateStr,
+                endDate: endDateStr,
+                itinerary: newItinerary
+            };
+
+            savePlanToStorage(newData);
+            
+            setTimeout(() => {
+                loadingSpinner.classList.add('hidden');
+                renderItineraryTable(newItinerary, tripName);
+            }, 300);
+        };
+        
+        // --- 類別選單相關邏輯 ---
+
+        const renderCategoryMenu = (index) => {
+            globalCategoryPopover.innerHTML = '';
+            
+            const menuContent = document.createElement('div');
+            menuContent.className = 'flex flex-col space-y-1';
+
+            Object.entries(CATEGORY_MAP).forEach(([key, map]) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = `w-full text-left px-4 py-2 text-sm text-gray-700 hover:opacity-80 rounded-lg flex items-center transition duration-150 ${map.class}`;
+                button.setAttribute('data-category', key);
+                button.onclick = () => window.selectCategory(index, key);
+                
+                button.innerHTML = `
+                    <span class="inline-block w-3 h-3 ${map.class} border border-gray-300 rounded-full mr-2"></span>
+                    ${key}
+                `; 
+                menuContent.appendChild(button);
+            });
+            
+            const clearButton = document.createElement('button');
+            clearButton.type = 'button';
+            clearButton.className = 'w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-100 rounded-lg mt-1';
+            clearButton.onclick = () => window.selectCategory(index, "");
+            clearButton.textContent = "清除類別 (無)";
+            menuContent.appendChild(clearButton);
+
+            globalCategoryPopover.appendChild(menuContent);
+        };
+        
+        window.showCategoryMenu = (index, buttonElement) => {
+            const isCurrentlyOpen = !globalCategoryPopover.classList.contains('hidden');
+            const currentPopoverIndex = parseInt(globalCategoryPopover.dataset.index);
+            
+            globalConfirmationPopover.classList.add('hidden');
+
+            if (isCurrentlyOpen && currentPopoverIndex === index) {
+                globalCategoryPopover.classList.add('hidden');
+                return;
+            }
+            
+            renderCategoryMenu(index);
+            globalCategoryPopover.dataset.index = index;
+            
+            const buttonRect = buttonElement.getBoundingClientRect();
+            const tableRect = itineraryTableSection.getBoundingClientRect();
+            
+            globalCategoryPopover.style.top = `${buttonRect.top - tableRect.top + buttonRect.height / 2}px`;
+            globalCategoryPopover.style.left = `${buttonRect.right - tableRect.left + 10}px`; 
+            globalCategoryPopover.style.transform = `translateY(-50%)`;
+
+            globalCategoryPopover.classList.remove('hidden');
+        };
+
+        window.selectCategory = (index, category) => {
+            globalCategoryPopover.classList.add('hidden');
+            const data = getStoredPlan();
+            if (data && data.itinerary && data.itinerary[index]) {
+                if (data.itinerary[index].category !== category) {
+                    data.itinerary[index].category = category;
+                    savePlanToStorage(data);
+                    renderItineraryTable(data.itinerary, data.tripName);
+                }
+            }
+        };
+
+        window.deleteRow = (index) => {
+            const data = getStoredPlan();
+            if (data && data.itinerary && data.itinerary[index]) {
+                 if(confirm("確定要刪除這一列嗎？")) {
+                    data.itinerary.splice(index, 1);
+                    savePlanToStorage(data);
+                    renderItineraryTable(data.itinerary, data.tripName);
+                 }
+            }
+        };
+        
+        // --- 確認狀態選單邏輯 ---
+        const renderConfirmationMenu = (index) => {
+            globalConfirmationPopover.innerHTML = '';
+            
+            const menuContent = document.createElement('div');
+            menuContent.className = 'flex flex-col space-y-1';
+
+            Object.entries(CONFIRMATION_MAP).forEach(([key, map]) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = `w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg flex items-center transition duration-150`;
+                button.onclick = () => window.selectConfirmation(index, key);
+                
+                button.innerHTML = `
+                    <span class="inline-flex items-center justify-center w-5 h-5 font-bold rounded mr-3 ${map.class}">${map.symbol}</span>
+                    ${map.text}
+                `; 
+                menuContent.appendChild(button);
+            });
+
+            globalConfirmationPopover.appendChild(menuContent);
+        };
+
+        window.showConfirmationMenu = (index, buttonElement) => {
+            const isCurrentlyOpen = !globalConfirmationPopover.classList.contains('hidden');
+            const currentPopoverIndex = parseInt(globalConfirmationPopover.dataset.index);
+
+            globalCategoryPopover.classList.add('hidden');
+            
+            if (isCurrentlyOpen && currentPopoverIndex === index) {
+                globalConfirmationPopover.classList.add('hidden');
+                return;
+            }
+            
+            renderConfirmationMenu(index);
+            globalConfirmationPopover.dataset.index = index;
+            
+            const buttonRect = buttonElement.getBoundingClientRect();
+            const tableRect = itineraryTableSection.getBoundingClientRect();
+            
+            const offsetRight = 10;
+            globalConfirmationPopover.style.top = `${buttonRect.top - tableRect.top + buttonRect.height / 2}px`;
+            globalConfirmationPopover.style.right = `${tableRect.right - buttonRect.right + offsetRight}px`;
+            globalConfirmationPopover.style.transform = `translateY(-50%)`;
+
+            globalConfirmationPopover.classList.remove('hidden');
+        };
+
+        window.selectConfirmation = (index, status) => {
+            globalConfirmationPopover.classList.add('hidden');
+            const data = getStoredPlan();
+            if (data && data.itinerary && data.itinerary[index]) {
+                if (data.itinerary[index].confirmation !== status) {
+                    data.itinerary[index].confirmation = status;
+                    savePlanToStorage(data);
+                    renderItineraryTable(data.itinerary, data.tripName);
+                }
+            }
+        };
+
+        // --- 處理可編輯儲存格的輸入與儲存 ---
+
+        const handleCellKeyDown = (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault(); 
+                event.target.blur();
+            }
+        };
+
+        const formatTimeInput = (value) => {
+            const cleanedValue = value.replace(/[^0-9]/g, '');
+            // Case 1: 3 digits (e.g., 600 -> 06:00, 930 -> 09:30)
+            if (cleanedValue.length === 3) {
+                const hours = parseInt(cleanedValue.substring(0, 1), 10);
+                const minutes = parseInt(cleanedValue.substring(1, 3), 10);
+                 if (hours >= 0 && hours <= 9 && minutes >= 0 && minutes <= 59) {
+                     return `0${hours}:${String(minutes).padStart(2, '0')}`;
+                 }
+            }
+            // Case 2: 4 digits (e.g., 1200 -> 12:00)
+            else if (cleanedValue.length === 4) {
+                const hours = parseInt(cleanedValue.substring(0, 2), 10);
+                const minutes = parseInt(cleanedValue.substring(2, 4), 10);
+                
+                if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+                    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+                }
+            }
+            return value;
+        };
+
+        const handleCellEdit = (event) => {
+            const cell = event.target;
+            const field = cell.dataset.field;
+            let newValue = cell.textContent.trim();
+
+            // 1. **表頭欄位儲存邏輯 (Cost Subheaders)**
+            if (cell.dataset.header === 'true') {
+                if (headerData[field] !== newValue) {
+                    const newHeaderData = { ...headerData, [field]: newValue };
+                    saveHeaderData(newHeaderData);
+                    headerData[field] = newValue;
+                }
+                return;
+            }
+
+            // 2. **行程內容儲存邏輯**
+            const index = parseInt(cell.dataset.index);
+            
+            // 時間格式化處理
+            if (field === 'departureTime') {
+                const formattedValue = formatTimeInput(newValue);
+                if (formattedValue !== newValue) {
+                    cell.textContent = formattedValue;
+                    newValue = formattedValue;
+                }
+            }
+
+            const data = getStoredPlan();
+            if (data && data.itinerary && data.itinerary[index]) {
+                if (data.itinerary[index][field] !== newValue) {
+                    data.itinerary[index][field] = newValue;
+                    savePlanToStorage(data);
+                }
+            }
+        };
+
+
+        // --- 表格渲染邏輯 ---
+        const renderItineraryTable = (itinerary, tripName) => {
+            currentTripName.textContent = tripName;
+            itineraryBody.innerHTML = '';
+            
+            const rowspans = {};
+            itinerary.forEach(item => {
+                if (!rowspans[item.date]) rowspans[item.date] = 0;
+                rowspans[item.date]++;
+            });
+
+            const processedDates = new Set();
+            updateHeaderDOM(); 
+
+            itinerary.forEach((item, index) => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50 transition duration-100';
+                row.dataset.index = index; 
+                
+                const isNewDay = !processedDates.has(item.date);
+                if (index > 0 && isNewDay) { 
+                    row.classList.add('new-day-border-top');
+                }
+
+                if (isNewDay) {
+                    const span = rowspans[item.date];
+                    const dateHtml = formatDay(item.date, item.dayNum, item.dayOfWeek);
+                    row.innerHTML += `
+                        <td rowspan="${span}" class="date-cell px-2 py-4 text-sm font-medium text-gray-900 text-center leading-tight border-r border-gray-200 bg-white align-middle">
+                            ${dateHtml}
+                        </td>
+                    `;
+                    processedDates.add(item.date);
+                }
+                
+                const categoryClass = CATEGORY_MAP[item.category] ? CATEGORY_MAP[item.category].class : 'bg-white';
+                const confirmationInfo = CONFIRMATION_MAP[item.confirmation] || CONFIRMATION_MAP["TBD"];
+
+                row.innerHTML += `
+                    <td class="px-3 py-4 text-sm text-gray-600 relative location-cell-wrapper group">
+                        <div class="absolute left-1 top-1/2 transform -translate-y-1/2 flex flex-col gap-1 row-controls z-10 no-print">
+                            <button type="button" onclick="insertRow(${index}, 'before')" class="text-blue-600 hover:text-blue-800 p-1 bg-blue-100 rounded-lg shadow-md border border-blue-200" title="在上方插入一列">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8l6 6H6z"/></svg>
+                            </button>
+                            <button type="button" onclick="insertRow(${index}, 'after')" class="text-blue-600 hover:text-blue-800 p-1 bg-blue-100 rounded-lg shadow-md border border-blue-200" title="在下方插入一列">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 16l-6-6h12z"/></svg>
+                            </button>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="editable-cell location-cell-content flex-grow pl-8 p-2 border border-gray-300 rounded min-h-[2.5rem] transition duration-200 ${categoryClass}" 
+                                 contenteditable="true" 
+                                 data-field="location" 
+                                 data-index="${index}">${item.location || ''}</div>
+                            
+                            <!-- 類別按鈕 -->
+                            <button type="button" 
+                                    onclick="window.showCategoryMenu(${index}, this)" 
+                                    class="category-toggle-btn ml-1 mt-0.5 p-1 rounded-full bg-gray-100 text-gray-500 hover:bg-blue-200 hover:text-blue-700 transition duration-150 shadow-md flex-shrink-0 no-print" 
+                                    title="選擇類別標籤">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                            </button>
+                            
+                            <!-- 新增：刪除列按鈕 (直接顯示) -->
+                            <button type="button" 
+                                    onclick="window.deleteRow(${index})" 
+                                    class="ml-1 mt-0.5 p-1 rounded-full bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition duration-150 shadow-sm flex-shrink-0 no-print" 
+                                    title="刪除此列">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            </button>
+                        </div>
+                    </td>
+                `;
+
+                // Add thick-border-left class for distinct separators
+                row.innerHTML += `
+                    <td class="px-3 py-4 whitespace-nowrap text-sm text-gray-600 align-top thick-border-left">
+                        <div class="editable-cell p-2 border border-gray-300 rounded bg-white min-h-[2.5rem] text-center" 
+                             contenteditable="true" 
+                             data-field="departureTime" 
+                             data-index="${index}">${item.departureTime || ''}</div>
+                    </td>
+                `;
+                
+                row.innerHTML += `
+                    <td class="px-3 py-4 text-sm text-gray-600 align-top w-24 thick-border-left">
+                        <div class="editable-cell p-2 border border-gray-300 rounded bg-white min-h-[2.5rem]" 
+                             contenteditable="true" 
+                             data-field="cost1" 
+                             data-index="${index}">${item.cost1 || ''}</div>
+                    </td>
+                `;
+
+                row.innerHTML += `
+                    <td class="px-3 py-4 text-sm text-gray-600 align-top w-24">
+                        <div class="editable-cell p-2 border border-gray-300 rounded bg-white min-h-[2.5rem]" 
+                             contenteditable="true" 
+                             data-field="cost2" 
+                             data-index="${index}">${item.cost2 || ''}</div>
+                    </td>
+                `;
+
+                row.innerHTML += `
+                    <td class="px-3 py-4 text-sm text-gray-600 align-top text-center w-16 thick-border-left">
+                        <button type="button" 
+                                onclick="window.showConfirmationMenu(${index}, this)" 
+                                class="confirmation-toggle-btn w-full h-8 text-lg font-bold rounded-lg shadow-md transition duration-150 ${confirmationInfo.class} no-print" 
+                                title="點擊切換確認狀態">
+                            ${confirmationInfo.symbol}
+                        </button>
+                        <span class="hidden print:inline-block">${confirmationInfo.symbol}</span>
+                    </td>
+                `;
+
+                row.innerHTML += `
+                    <td class="px-3 py-4 text-sm text-gray-600 align-top thick-border-left">
+                        <div class="editable-cell p-2 border border-gray-300 rounded bg-white min-h-[2.5rem]" 
+                             contenteditable="true" 
+                             data-field="remark" 
+                             data-index="${index}">${item.remark || ''}</div>
+                    </td>
+                `;
+
+                itineraryBody.appendChild(row);
+            });
+
+            document.querySelectorAll('.editable-cell').forEach(cell => {
+                cell.removeEventListener('blur', handleCellEdit); 
+                cell.removeEventListener('keydown', handleCellKeyDown); 
+                
+                cell.addEventListener('blur', handleCellEdit); 
+                cell.addEventListener('keydown', handleCellKeyDown); 
+            });
+            
+            inputFormSection.classList.add('hidden');
+            itineraryTableSection.classList.remove('hidden');
+        };
+
+        window.insertRow = (index, position) => {
+            const data = getStoredPlan();
+            if (!data) return;
+            
+            let newItinerary = [...data.itinerary];
+            const refItem = newItinerary[index];
+            
+            const newItem = {
+                date: refItem.date,
+                dayOfWeek: refItem.dayOfWeek,
+                dayNum: refItem.dayNum,
+                location: "",
+                departureTime: "",
+                cost1: "",
+                cost2: "",
+                confirmation: "TBD", 
+                remark: "",
+                category: "" 
+            };
+            
+            if (position === 'before') {
+                newItinerary.splice(index, 0, newItem);
+            } else {
+                newItinerary.splice(index + 1, 0, newItem);
+            }
+            
+            data.itinerary = newItinerary;
+            savePlanToStorage(data);
+            renderItineraryTable(data.itinerary, data.tripName);
+        };
+
+
+        const handleEditPlan = () => {
+            inputFormSection.classList.remove('hidden');
+            itineraryTableSection.classList.add('hidden');
+        };
+        
+        const handleFullReset = () => {
+            if(confirm('確定要清除所有資料嗎？這將無法復原。')) {
+                localStorage.removeItem(STORAGE_KEY_PLAN);
+                // Reset history
+                historyStack = [];
+                historyIndex = -1;
+                updateUndoRedoUI();
+
+                calendarState.selectedStartDate = null;
+                calendarState.selectedEndDate = null;
+                document.getElementById('startDateDisplay').value = '';
+                document.getElementById('endDateDisplay').value = '';
+                document.getElementById('startDate').value = '';
+                document.getElementById('endDate').value = '';
+                planForm.reset();
+                inputFormSection.classList.remove('hidden');
+                itineraryTableSection.classList.add('hidden');
+            }
+        };
+
+        // --- Import / Export Functions ---
+
+        window.exportToJPG = () => {
+            loadingText.textContent = '生成圖片中...';
+            loadingSpinner.classList.remove('hidden');
+            const element = document.getElementById("capture-area");
+            
+            html2canvas(element, { scale: 2, backgroundColor: "#ffffff" }).then(canvas => {
+                const link = document.createElement("a");
+                link.download = `${currentTripName.textContent.trim() || 'plan'}.jpg`;
+                link.href = canvas.toDataURL("image/jpeg", 0.9);
+                link.click();
+                loadingSpinner.classList.add('hidden');
+            }).catch(err => {
+                console.error(err);
+                showMessage("圖片導出失敗", 'error');
+                loadingSpinner.classList.add('hidden');
+            });
+        };
+
+        window.exportToCSV = () => {
+            const data = getStoredPlan();
+            if (!data || !data.itinerary) return;
+
+            // Add BOM for Excel UTF-8 support
+            let csvContent = "\uFEFF";
+            
+            // Header
+            csvContent += `Date,Location,Time,Cost (${headerData.costHeader1}),Cost (${headerData.costHeader2}),Confirmed,Remark,Category\n`;
+
+            data.itinerary.forEach(item => {
+                const row = [
+                    item.date,
+                    `"${(item.location || '').replace(/"/g, '""')}"`, // Escape quotes
+                    item.departureTime,
+                    item.cost1,
+                    item.cost2,
+                    item.confirmation,
+                    `"${(item.remark || '').replace(/"/g, '""')}"`,
+                    item.category
+                ];
+                csvContent += row.join(",") + "\n";
+            });
+
+            const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `${data.tripName || 'plan'}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        window.exportToJSON = () => {
+            const data = getStoredPlan();
+            if (!data) return;
+            const jsonStr = JSON.stringify(data, null, 2);
+            const blob = new Blob([jsonStr], { type: "application/json" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `backup_${data.tripName || 'plan'}.json`;
+            link.click();
+        };
+
+        importFileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    // Simple validation
+                    if (!importedData.itinerary || !Array.isArray(importedData.itinerary)) {
+                        throw new Error("Invalid format");
+                    }
+                    
+                    if(confirm("確定要導入此檔案嗎？目前的資料將被覆蓋。")) {
+                         savePlanToStorage(importedData);
+                         loadExistingPlan(); // Reload UI
+                         showMessage("計畫導入成功！");
+                    }
+                } catch (error) {
+                    console.error(error);
+                    showMessage("檔案格式錯誤，無法導入。", 'error');
+                }
+                event.target.value = ''; // Reset input
+            };
+            reader.readAsText(file);
+        });
+
+
+        window.onload = () => {
+            loadHeaderData();
+            loadExistingPlan();
+            planForm.addEventListener('submit', handlePlanFormSubmit);
+            editPlanButton.addEventListener('click', handleEditPlan); 
+            fullResetButton.addEventListener('click', handleFullReset); 
+        };
+    </script>
+</body>
+</html>
