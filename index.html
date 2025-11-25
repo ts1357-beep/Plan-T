@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <!-- 明確允許使用者縮放，改善手機瀏覽體驗 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>Plan-T (Local v6)</title>
+    <title>Plan-T (Local v7)</title>
     <!-- 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 載入 html2canvas 用於導出圖片 -->
@@ -81,6 +81,19 @@
             background-color: white; /* 聚焦時背景變白 */
         }
 
+        /* --- 新增：固定左側欄位 (Sticky Column) --- */
+        .sticky-col {
+            position: sticky;
+            left: 0;
+            z-index: 20; /* 確保在一般內容之上 */
+            /* 加一點陰影讓層次更明顯 */
+            box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1); 
+        }
+        /* 表頭的固定欄位層級要更高，以免被內容蓋過 */
+        thead .sticky-col {
+            z-index: 30;
+        }
+
         /* 隱藏列印或截圖時的按鈕 */
         @media print {
             .no-print { display: none !important; }
@@ -103,7 +116,7 @@
                     <line x1="2" y1="9" x2="6" y2="9"></line>
                     <path d="M2 5v14a2 0 0 0 2 2h14"></path>
                 </svg>
-                Plan-T (Local v6)
+                Plan-T (Local v7)
             </h1>
             <div class="w-12"></div> <!-- Spacer for centering -->
         </header>
@@ -220,8 +233,8 @@
                     <table class="min-w-full divide-y divide-gray-200 table-fixed border-b border-gray-200">
                         <thead class="bg-blue-50">
                             <tr>
-                                <!-- Date -->
-                                <th scope="col" rowspan="2" class="w-28 px-2 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider border-r border-gray-200 align-bottom">
+                                <!-- Date: 加上 sticky-col 類別 -->
+                                <th scope="col" rowspan="2" class="w-28 px-2 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider border-r border-gray-200 align-bottom sticky-col bg-blue-50">
                                     Date
                                 </th>
                                 <!-- Location -->
@@ -1039,7 +1052,7 @@
                     const span = rowspans[item.date];
                     const dateHtml = formatDay(item.date, item.dayNum, item.dayOfWeek);
                     row.innerHTML += `
-                        <td rowspan="${span}" class="date-cell px-2 py-4 text-sm font-medium text-gray-900 text-center leading-tight border-r border-gray-200 bg-white align-middle">
+                        <td rowspan="${span}" class="date-cell px-2 py-4 text-sm font-medium text-gray-900 text-center leading-tight border-r border-gray-200 bg-white align-middle sticky-col">
                             ${dateHtml}
                         </td>
                     `;
