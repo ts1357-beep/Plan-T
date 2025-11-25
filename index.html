@@ -2,8 +2,9 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Plan-T (Local v5)</title>
+    <!-- 明確允許使用者縮放，改善手機瀏覽體驗 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>Plan-T (Local v6)</title>
     <!-- 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 載入 html2canvas 用於導出圖片 -->
@@ -102,7 +103,7 @@
                     <line x1="2" y1="9" x2="6" y2="9"></line>
                     <path d="M2 5v14a2 0 0 0 2 2h14"></path>
                 </svg>
-                Plan-T (Local v5)
+                Plan-T (Local v6)
             </h1>
             <div class="w-12"></div> <!-- Spacer for centering -->
         </header>
@@ -199,7 +200,7 @@
                 <div class="flex gap-2">
                     <button onclick="exportToJPG()" class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-indigo-500 rounded hover:bg-indigo-600">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                        導出 JPG
+                        導出 JPG圖片
                     </button>
                     <button onclick="exportToCSV()" class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded hover:bg-green-700">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
@@ -1209,17 +1210,46 @@
         window.exportToJPG = () => {
             loadingText.textContent = '生成圖片中...';
             loadingSpinner.classList.remove('hidden');
-            const element = document.getElementById("capture-area");
             
-            html2canvas(element, { scale: 2, backgroundColor: "#ffffff" }).then(canvas => {
+            const originalElement = document.getElementById("capture-area");
+            
+            // Create a clone to render full width/height without scrollbars
+            const clone = originalElement.cloneNode(true);
+            
+            // Style the clone to ensure it's fully visible and expanded
+            clone.style.position = 'fixed'; // Take out of flow
+            clone.style.top = '-10000px';   // Hide offscreen
+            clone.style.left = '-10000px';
+            clone.style.width = '1200px';   // Force a wide desktop-like width to prevent mobile layout crunching
+            clone.style.height = 'auto';
+            clone.style.overflow = 'visible';
+            
+            // Find the table container in the clone and force expansion
+            const tableContainer = clone.querySelector('.overflow-x-auto');
+            if(tableContainer) {
+                tableContainer.classList.remove('overflow-x-auto');
+                tableContainer.style.overflow = 'visible';
+            }
+
+            document.body.appendChild(clone);
+            
+            html2canvas(clone, { 
+                scale: 2, 
+                backgroundColor: "#ffffff",
+                useCORS: true,
+                scrollY: -window.scrollY // Fix scroll offset issues
+            }).then(canvas => {
                 const link = document.createElement("a");
                 link.download = `${currentTripName.textContent.trim() || 'plan'}.jpg`;
                 link.href = canvas.toDataURL("image/jpeg", 0.9);
                 link.click();
+                
+                document.body.removeChild(clone);
                 loadingSpinner.classList.add('hidden');
             }).catch(err => {
                 console.error(err);
                 showMessage("圖片導出失敗", 'error');
+                if(document.body.contains(clone)) document.body.removeChild(clone);
                 loadingSpinner.classList.add('hidden');
             });
         };
