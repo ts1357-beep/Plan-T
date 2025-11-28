@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <!-- 明確允許使用者縮放，改善手機瀏覽體驗 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>Plan-T (Local v9)</title>
+    <title>Plan-T (Local v10)</title>
     <!-- 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 載入 html2canvas 用於導出圖片 -->
@@ -126,7 +126,7 @@
                     <line x1="2" y1="9" x2="6" y2="9"></line>
                     <path d="M2 5v14a2 0 0 0 2 2h14"></path>
                 </svg>
-                Plan-T (Local v9)
+                Plan-T (Local v10)
             </h1>
             
             <div class="w-full md:w-auto flex justify-end">
@@ -214,10 +214,10 @@
             <div class="mb-4 flex flex-wrap justify-between items-center gap-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100 no-print">
                 <!-- 左側：設定、存檔、復原控制 -->
                 <div class="flex gap-2 items-center flex-wrap">
-                    <!-- 回到設定 (原底部按鈕移至此) -->
+                    <!-- 回到設定 (修改按鈕文字) -->
                     <button onclick="handleEditPlan()" class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:ring-2 focus:ring-gray-200" title="修改標題或日期">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-                        設定
+                        回到上一頁 (編輯名稱/日期)
                     </button>
 
                     <!-- 新增：快速存檔按鈕 -->
@@ -274,6 +274,10 @@
                                 <th scope="col" rowspan="2" class="w-24 px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider align-bottom thick-border-left">
                                     出發時間
                                 </th>
+                                <!-- Remark (移到這裡) -->
+                                <th scope="col" rowspan="2" class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider align-bottom thick-border-left">
+                                    Remark
+                                </th>
                                 <!-- Cost (合併儲存格) -->
                                 <th scope="col" colspan="2" class="w-48 px-3 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 thick-border-left">
                                     Cost
@@ -281,10 +285,6 @@
                                 <!-- 確 -->
                                 <th scope="col" rowspan="2" class="w-16 px-3 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider align-bottom thick-border-left">
                                     確
-                                </th>
-                                <!-- Remark -->
-                                <th scope="col" rowspan="2" class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider align-bottom thick-border-left">
-                                    Remark
                                 </th>
                             </tr>
                             <tr>
@@ -1274,6 +1274,16 @@
                              data-index="${index}">${item.departureTime || ''}</div>
                     </td>
                 `;
+
+                // Moved Remark here
+                row.innerHTML += `
+                    <td class="px-3 py-4 text-sm text-gray-600 align-top thick-border-left">
+                        <div class="editable-cell p-2 border border-gray-300 rounded bg-white min-h-[2.5rem]" 
+                             contenteditable="true" 
+                             data-field="remark" 
+                             data-index="${index}">${item.remark || ''}</div>
+                    </td>
+                `;
                 
                 row.innerHTML += `
                     <td class="px-3 py-4 text-sm text-gray-600 align-top w-24 thick-border-left">
@@ -1302,15 +1312,6 @@
                             ${confirmationInfo.symbol}
                         </button>
                         <span class="hidden print:inline-block">${confirmationInfo.symbol}</span>
-                    </td>
-                `;
-
-                row.innerHTML += `
-                    <td class="px-3 py-4 text-sm text-gray-600 align-top thick-border-left">
-                        <div class="editable-cell p-2 border border-gray-300 rounded bg-white min-h-[2.5rem]" 
-                             contenteditable="true" 
-                             data-field="remark" 
-                             data-index="${index}">${item.remark || ''}</div>
                     </td>
                 `;
 
