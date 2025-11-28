@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <!-- 明確允許使用者縮放，改善手機瀏覽體驗 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>Plan-T (Local v8)</title>
+    <title>Plan-T (Local v9)</title>
     <!-- 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 載入 html2canvas 用於導出圖片 -->
@@ -111,10 +111,10 @@
         <!-- 應用程式標題 -->
         <header class="text-center mb-8 bg-white p-4 rounded-xl shadow-lg flex flex-col md:flex-row justify-between items-center relative gap-4">
             <div class="w-full md:w-auto flex justify-start">
-                 <!-- 存檔按鈕 (新增) -->
-                <button onclick="openSaveManager()" class="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 transition font-medium border border-amber-200">
+                 <!-- 存檔按鈕 (開啟管理介面) -->
+                <button onclick="openSaveManager()" class="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-800 rounded-lg hover:bg-amber-100 transition font-medium border border-amber-200">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-                    我的存檔庫
+                    開啟存檔庫
                 </button>
             </div>
             
@@ -126,7 +126,7 @@
                     <line x1="2" y1="9" x2="6" y2="9"></line>
                     <path d="M2 5v14a2 0 0 0 2 2h14"></path>
                 </svg>
-                Plan-T (Local v8)
+                Plan-T (Local v9)
             </h1>
             
             <div class="w-full md:w-auto flex justify-end">
@@ -210,10 +210,25 @@
         <!-- 行程表顯示區塊 -->
         <section id="itinerary-table-section" class="hidden">
             
-            <!-- 工具列 (復原/重做/導出) -->
+            <!-- 工具列 (設定/存檔 + 復原/重做 + 導出) -->
             <div class="mb-4 flex flex-wrap justify-between items-center gap-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100 no-print">
-                <div class="flex gap-2">
-                     <button id="btn-undo" onclick="undo()" class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">
+                <!-- 左側：設定、存檔、復原控制 -->
+                <div class="flex gap-2 items-center flex-wrap">
+                    <!-- 回到設定 (原底部按鈕移至此) -->
+                    <button onclick="handleEditPlan()" class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:ring-2 focus:ring-gray-200" title="修改標題或日期">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                        設定
+                    </button>
+
+                    <!-- 新增：快速存檔按鈕 -->
+                    <button onclick="saveCurrentPlanToLibrary(true)" class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-amber-800 bg-amber-100 border border-amber-300 rounded hover:bg-amber-200 focus:ring-2 focus:ring-amber-300" title="將目前進度覆蓋或新增到存檔庫">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                        存檔
+                    </button>
+
+                    <div class="w-px h-6 bg-gray-300 mx-1"></div> <!-- 分隔線 -->
+
+                    <button id="btn-undo" onclick="undo()" class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>
                         上一步
                     </button>
@@ -223,18 +238,19 @@
                     </button>
                 </div>
 
-                <div class="flex gap-2">
+                <!-- 右側：導出按鈕 -->
+                <div class="flex gap-2 items-center flex-wrap mt-2 sm:mt-0">
                     <button onclick="exportToJPG()" class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-indigo-500 rounded hover:bg-indigo-600">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                        導出 JPG圖片
+                        JPG
                     </button>
                     <button onclick="exportToCSV()" class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded hover:bg-green-700">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                        導出 CSV
+                        CSV
                     </button>
                     <button onclick="exportToJSON()" class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-200 rounded hover:bg-gray-300">
                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        備份 JSON
+                        JSON
                     </button>
                 </div>
             </div>
@@ -288,11 +304,7 @@
                 </div>
             </div>
 
-            <div class="mt-6 text-center no-print">
-                <button id="edit-plan-button" class="py-2 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition duration-150">
-                    回到上一頁 (編輯名稱/日期)
-                </button>
-            </div>
+            <!-- 原本底部的回到上一頁按鈕已移除 -->
         </section>
 
         <!-- 加載動畫 -->
@@ -303,7 +315,7 @@
 
     </div>
 
-    <!-- 存檔管理 Modal (新增) -->
+    <!-- 存檔管理 Modal (更新後) -->
     <div id="save-manager-modal" class="hidden fixed inset-0 z-[100] modal-overlay flex justify-center items-center p-4">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
             <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
@@ -366,7 +378,7 @@
         const messageArea = document.getElementById('message-area');
         const loadingSpinner = document.getElementById('loading-spinner');
         const loadingText = document.getElementById('loading-text');
-        const editPlanButton = document.getElementById('edit-plan-button');
+        // const editPlanButton = document.getElementById('edit-plan-button'); // Removed bottom button ref
         const fullResetButton = document.getElementById('full-reset-button');
         const globalCategoryPopover = document.getElementById('global-category-popover');
         const globalConfirmationPopover = document.getElementById('global-confirmation-popover');
@@ -760,6 +772,11 @@
             }
         };
 
+        window.handleEditPlan = () => {
+            inputFormSection.classList.remove('hidden');
+            itineraryTableSection.classList.add('hidden');
+        };
+
         const handlePlanFormSubmit = (event) => {
             event.preventDefault();
             
@@ -868,7 +885,13 @@
             saveManagerModal.classList.add('hidden');
         };
 
-        window.saveCurrentPlanToLibrary = () => {
+        // Updated Save Function: Supports Interactive & Overwrite Logic
+        window.saveCurrentPlanToLibrary = (interactive = false) => {
+            // Force blur to ensure current edit is saved to LocalStorage first
+            if (document.activeElement && document.activeElement.classList.contains('editable-cell')) {
+                document.activeElement.blur();
+            }
+
             const currentData = getStoredPlan();
             if (!currentData || !currentData.tripName) {
                 alert("目前沒有有效的行程可供儲存。");
@@ -876,6 +899,21 @@
             }
 
             const library = getLibrary();
+            
+            // Check for existing plan with same name
+            const existingIndex = library.findIndex(item => item.name === currentData.tripName);
+            
+            if (existingIndex !== -1) {
+                // If triggered by the "Save" button in toolbar, ask for overwrite
+                if (!confirm(`存檔庫中已有「${currentData.tripName}」。\n是否要覆蓋舊檔？\n(取消則會另存為複本)`)) {
+                    // User chose not to overwrite -> Create Copy
+                    currentData.tripName = `${currentData.tripName} (Copy ${new Date().getHours()}${new Date().getMinutes()})`;
+                } else {
+                    // User chose to overwrite -> Remove old one
+                    library.splice(existingIndex, 1);
+                }
+            }
+
             const newSave = {
                 id: Date.now(), // Unique ID
                 name: currentData.tripName,
@@ -886,7 +924,13 @@
             library.unshift(newSave); // Add to top
             saveLibrary(library);
             renderSaveList();
-            alert("行程已成功儲存到本機庫！");
+            
+            if (interactive) {
+                alert(`行程「${currentData.tripName}」已成功儲存到存檔庫！`);
+            } else {
+                alert(`行程「${currentData.tripName}」已成功儲存！`);
+                closeSaveManager();
+            }
         };
 
         window.loadFromLibrary = (id) => {
@@ -1316,11 +1360,6 @@
             renderItineraryTable(data.itinerary, data.tripName);
         };
 
-
-        const handleEditPlan = () => {
-            inputFormSection.classList.remove('hidden');
-            itineraryTableSection.classList.add('hidden');
-        };
         
         const handleFullReset = () => {
             if(confirm('確定要清除所有資料嗎？這將無法復原。')) {
@@ -1468,7 +1507,7 @@
             loadHeaderData();
             loadExistingPlan();
             planForm.addEventListener('submit', handlePlanFormSubmit);
-            editPlanButton.addEventListener('click', handleEditPlan); 
+            // editPlanButton.addEventListener('click', handleEditPlan); // Removed event listener for removed element
             fullResetButton.addEventListener('click', handleFullReset); 
         };
     </script>
