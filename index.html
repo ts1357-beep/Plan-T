@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <!-- 明確允許使用者縮放，改善手機瀏覽體驗 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>Plan-T (Local v10)</title>
+    <title>Plan-T (Local v11)</title>
     <!-- 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 載入 html2canvas 用於導出圖片 -->
@@ -126,7 +126,7 @@
                     <line x1="2" y1="9" x2="6" y2="9"></line>
                     <path d="M2 5v14a2 0 0 0 2 2h14"></path>
                 </svg>
-                Plan-T (Local v10)
+                Plan-T (Local v11)
             </h1>
             
             <div class="w-full md:w-auto flex justify-end">
@@ -1407,6 +1407,15 @@
                 tableContainer.classList.remove('overflow-x-auto');
                 tableContainer.style.overflow = 'visible';
             }
+
+            // [Fix for v11] Remove sticky positioning for export
+            // html2canvas renders sticky elements relative to the viewport/scroll, 
+            // which causes them to float or misalign in the static clone.
+            clone.querySelectorAll('.sticky-col').forEach(el => {
+                el.style.position = 'static';
+                el.style.boxShadow = 'none'; // Remove shadow used for sticky effect
+                el.classList.remove('sticky-col');
+            });
 
             document.body.appendChild(clone);
             
